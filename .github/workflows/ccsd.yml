@@ -10,7 +10,7 @@ jobs:
   
   deploy:
     name: Deploy to Server
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 60
     steps:
     - name: Connect SSH server
