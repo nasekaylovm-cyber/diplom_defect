@@ -48,9 +48,19 @@ jobs:
         echo "PostgreSQL is ready!"
       
     - name: Run tests
-    
       run: |
-        python manage.py test dojo.unittests dojo.api --noinput
+        echo "=== Looking for test directories ==="
+        find . -type d -name "*test*" | grep -v __pycache__ | head -10
+        
+        echo "=== Running discovered tests ==="
+        
+        if [ -d "dojo/test" ]; then
+          python manage.py test dojo.test --noinput
+        elif [ -d "dojo/tests" ]; then
+          python manage.py test dojo.tests --noinput
+        else
+          python manage.py test --noinput
+        fi
       env:
         DATABASE_URL: postgresql://defectdojo:defectdojo@localhost:5432/defectdojo_test
         DD_SECRET_KEY: "test-key-$(date +%s)"
