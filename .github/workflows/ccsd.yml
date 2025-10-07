@@ -10,7 +10,7 @@ jobs:
   
   deploy:
     name: Deploy to Server
-    runs-on: self-hosted-large
+    runs-on: self-hosted
     strategy:
       matrix:
         
