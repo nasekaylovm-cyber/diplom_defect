@@ -55,16 +55,51 @@ jobs:
         echo "=== Running discovered tests ==="
         
         if [ -d "dojo/test" ]; then
-          python manage.py test dojo.test --noinput
+          python -m pytest dojo/test --junitxml=test-results.xml --tb=short -v || true
         elif [ -d "dojo/tests" ]; then
-          python manage.py test dojo.tests --noinput
+          python -m pytest dojo/tests --junitxml=test-results.xml --tb=short -v || true
         else
-          python manage.py test --noinput
+          python -m pytest . --junitxml=test-results.xml --tb=short -v || true
         fi
       env:
         DATABASE_URL: postgresql://defectdojo:defectdojo@localhost:5432/defectdojo_test
         DD_SECRET_KEY: "test-key-$(date +%s)"
 
+    - name: test results
+      uses: actions/upload-artifact@v4
+      with:
+            name: test-results
+            path: |
+              test-results.xml
+              test-output.log
+            retention-days: 30
+    
+    - name: Publish Test Report
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+            name: Django Tests
+            path: test-results.xml
+            reporter: java-junit
+            fail-on-error: false
+    
+    - name: Create Test Summary
+      run: |
+            echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            if [ -f "test-results.xml" ]; then
+              TESTS=$(grep -o 'tests="[^"]*"' test-results.xml | head -1 | sed 's/tests="//' | sed 's/"//')
+              FAILURES=$(grep -o 'failures="[^"]*"' test-results.xml | head -1 | sed 's/failures="//' | sed 's/"//')
+              ERRORS=$(grep -o 'errors="[^"]*"' test-results.xml | head -1 | sed 's/errors="//' | sed 's/"//')
+              echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+              echo "| Total Tests | $TESTS |" >> $GITHUB_STEP_SUMMARY
+              echo "| Failures | $FAILURES |" >> $GITHUB_STEP_SUMMARY
+              echo "| Errors | $ERRORS |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "Test results file not found" >> $GITHUB_STEP_SUMMARY
+            fi
+    
 
   security-scan:
     runs-on: ubuntu-latest
