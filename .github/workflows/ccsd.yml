@@ -13,28 +13,21 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 30
     steps:
-    - name: Connect SSH server
-      uses: appleboy/ssh-action@v0.1.7
-      with:
-        host: 5.129.250.92
-        username: root
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          cd /opt
-          if [ -d "django-DefectDojo" ]; then
-            rm -rf django-DefectDojo
-            echo "Existing project directory removed"
-          fi
-          mkdir django-DefectDojo
-          echo "New project directory created"
-          git clone https://github.com/DefectDojo/django-DefectDojo
-          cd django-DefectDojo
-          
-          ./docker/docker-compose-check.sh
-
-          docker compose build nginx
-          
-          docker-compose up -d
-          
-          docker compose logs initializer | grep "Admin password:"
-          
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Deploy DefectDojo
+      run: |
+        cd /opt
+        sudo rm -rf django-DefectDojo
+        sudo git clone https://github.com/DefectDojo/django-DefectDojo
+        cd django-DefectDojo
+        
+        chmod +x ./docker/docker-compose-check.sh
+        ./docker/docker-compose-check.sh
+        
+        sudo docker compose build nginx
+        sudo docker-compose up -d
+        
+        sleep 60
+        sudo docker compose logs initializer | grep -i "admin"
