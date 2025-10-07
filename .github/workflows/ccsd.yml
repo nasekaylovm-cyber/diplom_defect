@@ -2,16 +2,16 @@ name: CD-Deploy
 
 on:
   push:
-    branches: [ master, develop ]
+    branches: [ master ]
   pull_request:
-    branches: [ master, develop ]
+    branches: [ master ]
 
 jobs:
   
   deploy:
     name: Deploy to Server
     runs-on: self-hosted
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
     - name: Connect SSH server
       uses: appleboy/ssh-action@v0.1.7
@@ -25,25 +25,16 @@ jobs:
             rm -rf django-DefectDojo
             echo "Existing project directory removed"
           fi
-          sleep 300
           mkdir django-DefectDojo
           echo "New project directory created"
           git clone https://github.com/DefectDojo/django-DefectDojo
           cd django-DefectDojo
-          sleep 100
-          ./docker/docker-compose-check.sh
-          sleep 300
-          docker compose build
           
-          until docker-compose ps | grep "Up" > /dev/null; do
-              sleep 10
-          done
+          ./docker/docker-compose-check.sh
+
+          docker compose build nginx
           
           docker-compose up -d
-          
-          until docker compose logs initializer | grep "Admin password:" > /dev/null; do
-              sleep 10
-          done
           
           docker compose logs initializer | grep "Admin password:"
           
