@@ -26,7 +26,7 @@ jobs:
         sudo chmod +x ./docker/docker-compose-check.sh
         sudo ./docker/docker-compose-check.sh
         
-        sudo docker compose build --no-cache
-        sudo docker-compose up -d
+        docker compose build nginx --no-cache
+        docker-compose up -d
         
-        sudo docker compose logs initializer | grep -i "admin"
+        docker compose logs initializer | grep -i "admin"
