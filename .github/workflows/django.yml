@@ -48,7 +48,7 @@ jobs:
         echo "PostgreSQL is ready!"
       
     - name: Run tests
-      run: python manage.py test --noinput
+      run: python manage.py test --noinput --failfast
       env:
         DATABASE_URL: postgresql://defectdojo:defectdojo@localhost:5432/defectdojo_test
         DD_SECRET_KEY: "test-key-$(date +%s)"
