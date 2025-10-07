@@ -10,7 +10,14 @@ jobs:
   
   deploy:
     name: Deploy to Server
-    runs-on: self-hosted
+    runs-on: self-hosted-large
+    strategy:
+      matrix:
+        
+        include:
+          - python-version: "3.11"
+            resource-class: large
+            
     timeout-minutes: 30
     steps:
     - name: Checkout code
