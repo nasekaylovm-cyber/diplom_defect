@@ -28,7 +28,7 @@ jobs:
       run: pip install -r requirements.txt
       
     - name: Wait for PostgreSQL
-      run: until pg_isready -h localhost; do sleep 2; done
+      run: until pg_isready -h localhost; do sleep 5; done
       
     - name: Run tests
       run: python manage.py test --noinput
