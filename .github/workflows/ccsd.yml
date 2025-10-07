@@ -10,15 +10,8 @@ jobs:
   
   deploy:
     name: Deploy to Server
-    runs-on: self-hosted
-    strategy:
-      matrix:
-        
-        include:
-          - python-version: "3.11"
-            resource-class: large
-            
-    timeout-minutes: 30
+    runs-on: self-hosted      
+    timeout-minutes: 60
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -36,5 +29,4 @@ jobs:
         sudo docker compose build --no-cache
         sudo docker-compose up -d
         
-        sleep 90
         sudo docker compose logs initializer | grep -i "admin"
