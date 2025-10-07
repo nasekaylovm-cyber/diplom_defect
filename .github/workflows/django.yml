@@ -16,25 +16,49 @@ jobs:
           POSTGRES_DB: defectdojo_test
           POSTGRES_USER: defectdojo
           POSTGRES_PASSWORD: defectdojo
-        ports: [5432:5432]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
 
     steps:
     - uses: actions/checkout@v4
+    
     - uses: actions/setup-python@v4
       with:
-        python-version: '3'
+        python-version: '3.11'
         
-    - name: Install dependencies
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client
+        
+    - name: Install Python dependencies
       run: pip install -r requirements.txt
       
     - name: Wait for PostgreSQL
-      run: until pg_isready -h localhost; do sleep 5; done
+      run: |
+        until pg_isready -h localhost -p 5432 -U defectdojo; do
+          echo "Waiting for PostgreSQL..."
+          sleep 5
+        done
+        echo "PostgreSQL is ready!"
       
     - name: Run tests
       run: python manage.py test --noinput
       env:
         DATABASE_URL: postgresql://defectdojo:defectdojo@localhost:5432/defectdojo_test
         DD_SECRET_KEY: "test-key-$(date +%s)"
+        DD_DATABASE_ENGINE: django.db.backends.postgresql
+        DD_DATABASE_NAME: defectdojo_test
+        DD_DATABASE_USER: defectdojo
+        DD_DATABASE_PASSWORD: defectdojo
+        DD_DATABASE_HOST: localhost
+        DD_DATABASE_PORT: 5432
+
 
   security-scan:
     runs-on: ubuntu-latest
