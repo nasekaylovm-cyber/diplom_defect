@@ -23,8 +23,8 @@ jobs:
         sudo git clone https://github.com/DefectDojo/django-DefectDojo
         cd django-DefectDojo
         
-        chmod +x ./docker/docker-compose-check.sh
-        ./docker/docker-compose-check.sh
+        sudo chmod +x ./docker/docker-compose-check.sh
+        sudo ./docker/docker-compose-check.sh
         
         sudo docker compose build nginx
         sudo docker-compose up -d
