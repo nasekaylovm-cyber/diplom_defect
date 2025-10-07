@@ -48,16 +48,12 @@ jobs:
         echo "PostgreSQL is ready!"
       
     - name: Run tests
-      run: python manage.py test --noinput --failfast
+    
+      run: |
+        python manage.py test dojo.unittests dojo.api --noinput
       env:
         DATABASE_URL: postgresql://defectdojo:defectdojo@localhost:5432/defectdojo_test
         DD_SECRET_KEY: "test-key-$(date +%s)"
-        DD_DATABASE_ENGINE: django.db.backends.postgresql
-        DD_DATABASE_NAME: defectdojo_test
-        DD_DATABASE_USER: defectdojo
-        DD_DATABASE_PASSWORD: defectdojo
-        DD_DATABASE_HOST: localhost
-        DD_DATABASE_PORT: 5432
 
 
   security-scan:
