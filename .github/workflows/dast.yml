@@ -8,26 +8,17 @@ on:
 
 jobs:
   dast:
-    runs-on: self-hosted
+    runs-on: [self-hosted, linux]
     
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    
-    - name: Verify target
-      run: curl -s http://localhost:8080 | grep -q DefectDojo && echo "✅ Target verified"
-    
-    - name: ZAP Security Scan
+    - name: Quick ZAP scan
       run: |
-        mkdir -p security-reports
+        mkdir -p reports
         docker run --rm --network host \
-          -v $(pwd)/security-reports:/zap/wrk:rw \
+          -v $(pwd)/reports:/zap/wrk:rw \
           ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
           -t http://localhost:8080 \
-          -J zap-report.json \
-          -r zap-report.html \
           -I
-      continue-on-error: true
     
     - name: Nuclei Scan
       run: |
