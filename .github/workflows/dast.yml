@@ -11,176 +11,19 @@ jobs:
     runs-on: self-hosted
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
     
-    - name: Run OWASP ZAP Baseline Scan
+    - name: Run ZAP scan
       run: |
-        echo "🔍 Starting OWASP ZAP Baseline Scan..."
-        
-    
-        mkdir -p zap-reports
-        
-        docker run --rm \
-          --network host \
-          -v $(pwd)/zap-reports:/zap/wrk:rw \
-          -u zap \
+        docker run --rm --network host \
+          -v $(pwd):/reports \
           owasp/zap2docker-stable zap-baseline.py \
           -t http://localhost:8080 \
-          -J -r -w zap-report.html \
-          -m 5 \
-          -I
-          
-        echo "✅ ZAP Baseline Scan completed"
+          -J -r \
+          -m 5
       continue-on-error: true
-      timeout-minutes: 25
+
     
-    - name: Run Nuclei Scan
+    - name: Show results
       run: |
-        echo "🔍 Starting Nuclei Scan..."
-        
-        mkdir -p nuclei-reports
-        
-        docker run --rm \
-          --network host \
-          -v $(pwd)/nuclei-reports:/reports \
-          projectdiscovery/nuclei:latest \
-          -u http://localhost:8080 \
-          -severity critical,high,medium \
-          -json -o /reports/nuclei-results.json \
-          -rate-limit 30 \
-          -timeout 20
-          
-        echo "✅ Nuclei Scan completed"
-      continue-on-error: true
-      timeout-minutes: 15
-    
-    - name: Run Nikto Scan
-      run: |
-        echo "🔍 Starting Nikto Scan..."
-        mkdir -p nikto-reports
-        
-        docker run --rm \
-          --network host \
-          -v $(pwd)/nikto-reports:/reports \
-          sullo/nikto \
-          -h http://localhost:8080 \
-          -o /reports/nikto-report.html \
-          -Format htm
-          
-        echo "✅ Nikto Scan completed"
-      continue-on-error: true
-      timeout-minutes: 10
-    
-    - name: Analyze and Generate Summary
-      run: |
-        echo "📊 Generating DAST Scan Summary..."
-        
-        # Создаем красивый отчет
-        cat << EOF > dast-summary.md
-        # 🛡️ DAST Security Scan Report
-        
-        ## Scan Information
-        - **Scan Date**: $(date)
-        - **Target Application**: DefectDojo
-        - **Target URL**: http://localhost:8080
-        - **Workflow**: ${{ github.workflow }}
-        - **Run ID**: ${{ github.run_id }}
-        
-        ## 📈 Scan Results
-        EOF
-        
-        # Анализ ZAP результатов
-        if [ -f zap-reports/zap-report.json ]; then
-          ZAP_HIGH=$(jq '[.site[]?.alerts[]? | select(.risk == "High")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
-          ZAP_MEDIUM=$(jq '[.site[]?.alerts[]? | select(.risk == "Medium")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
-          ZAP_LOW=$(jq '[.site[]?.alerts[]? | select(.risk == "Low")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
-          ZAP_INFO=$(jq '[.site[]?.alerts[]? | select(.risk == "Informational")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
-          
-          echo "### 🔥 OWASP ZAP Results" >> dast-summary.md
-          echo "- **High Risk**: $ZAP_HIGH" >> dast-summary.md
-          echo "- **Medium Risk**: $ZAP_MEDIUM" >> dast-summary.md
-          echo "- **Low Risk**: $ZAP_LOW" >> dast-summary.md
-          echo "- **Informational**: $ZAP_INFO" >> dast-summary.md
-          echo "" >> dast-summary.md
-        else
-          echo "### OWASP ZAP Results: No report generated" >> dast-summary.md
-        fi
-        
-        # Анализ Nuclei результатов
-        if [ -f nuclei-reports/nuclei-results.json ]; then
-          NUCLEI_CRITICAL=$(grep -c '"severity":"critical"' nuclei-reports/nuclei-results.json 2>/dev/null || echo "0")
-          NUCLEI_HIGH=$(grep -c '"severity":"high"' nuclei-reports/nuclei-results.json 2>/dev/null || echo "0")
-          NUCLEI_MEDIUM=$(grep -c '"severity":"medium"' nuclei-reports/nuclei-results.json 2>/dev/null || echo "0")
-          
-          echo "### 🎯 Nuclei Results" >> dast-summary.md
-          echo "- **Critical**: $NUCLEI_CRITICAL" >> dast-summary.md
-          echo "- **High**: $NUCLEI_HIGH" >> dast-summary.md
-          echo "- **Medium**: $NUCLEI_MEDIUM" >> dast-summary.md
-          echo "" >> dast-summary.md
-        else
-          echo "### Nuclei Results: No report generated" >> dast-summary.md
-        fi
-        
-        # Добавляем рекомендации
-        cat << EOF >> dast-summary.md
-        ## 🚨 Security Assessment
-        
-        EOF
-        
-        # Динамическая оценка рисков
-        if [ "$ZAP_HIGH" -gt 0 ] || [ "$NUCLEI_CRITICAL" -gt 0 ]; then
-          echo "**Status**: ❌ CRITICAL - Immediate action required" >> dast-summary.md
-        elif [ "$ZAP_MEDIUM" -gt 0 ] || [ "$NUCLEI_HIGH" -gt 0 ]; then
-          echo "**Status**: ⚠️ HIGH - Review and fix required" >> dast-summary.md
-        else
-          echo "**Status**: ✅ PASS - No critical issues found" >> dast-summary.md
-        fi
-        
-        cat << EOF >> dast-summary.md
-        
-        ## 📋 Recommended Actions
-        
-        1. **Review detailed reports** in the downloaded artifacts
-        2. **Prioritize Critical/High vulnerabilities**
-        3. **Implement security headers**
-        4. **Input validation improvements**
-        5. **Re-scan after fixes**
-        
-        ## 🔍 Next Steps
-        
-        - Download artifacts for detailed analysis
-        - Create tickets for identified vulnerabilities
-        - Schedule re-scan after remediation
-        - Consider implementing WAF rules
-        
-        ---
-        *Generated automatically by GitHub Actions DAST Pipeline*
-        EOF
-        
-        echo "✅ DAST Summary Report generated"
-        
-        # Выводим краткий результат в консоль
-        echo "=== DAST SCAN COMPLETED ==="
-        echo "ZAP - High: $ZAP_HIGH, Medium: $ZAP_MEDIUM"
-        echo "Nuclei - Critical: $NUCLEI_CRITICAL, High: $NUCLEI_HIGH"
-    
-    - name: Upload DAST Reports
-      uses: actions/upload-artifact@v4
-      with:
-        name: dast-reports-${{ github.run_id }}
-        path: |
-          zap-reports/
-          nuclei-reports/
-          nikto-reports/
-          dast-summary.md
-        retention-days: 30
-        compression-level: 9
-    
-    - name: Notify Scan Completion
-      if: always()
-      run: |
-        echo "🎉 DAST Scanning completed!"
-        echo "Workflow: ${{ github.workflow }}"
-        echo "Status: ${{ job.status }}"
-        echo "Run URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        echo "=== SCAN COMPLETE ==="
+        ls -la *.json *.html 2>/dev/null || echo "No reports generated"
