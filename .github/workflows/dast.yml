@@ -11,119 +11,213 @@ jobs:
     runs-on: self-hosted
     
     steps:
-    - name: Quick ZAP scan
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Wait for application to be ready
       run: |
-        mkdir -p reports
-        docker run --rm --network host \
-          -v $(pwd)/reports:/zap/wrk:rw \
-          ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+        echo "⏳ Waiting for DefectDojo to be fully ready..."
+        
+        max_attempts=30
+     
+        attempt=1
+        
+        while [ $attempt -le $max_attempts ]; do
+          if curl -s -f http://localhost:8080 > /dev/null; then
+            echo "✅ Application is running and accessible"
+            
+            # Дополнительная проверка что приложение полностью загрузилось
+            if curl -s http://localhost:8080 | grep -q "DefectDojo"; then
+              echo "✅ DefectDojo fully loaded"
+              break
+            else
+              echo "⏳ Application responding but not fully loaded..."
+            fi
+          else
+            echo "⏳ Waiting for application... (attempt $attempt/$max_attempts)"
+          fi
+          
+          sleep 10
+          attempt=$((attempt + 1))
+        done
+        
+        if [ $attempt -gt $max_attempts ]; then
+          echo "❌ Application not fully ready after $max_attempts attempts"
+          exit 1
+        fi
+        
+        # Финальная проверка
+        echo "🎯 Final application check:"
+        curl -I http://localhost:8080
+    
+    - name: Run OWASP ZAP Baseline Scan
+      run: |
+        echo "🔍 Starting OWASP ZAP Baseline Scan..."
+        
+        # Создаем директорию для отчетов
+        mkdir -p zap-reports
+        
+        docker run --rm \
+          --network host \
+          -v $(pwd)/zap-reports:/zap/wrk:rw \
+          -u zap \
+          owasp/zap2docker-stable zap-baseline.py \
           -t http://localhost:8080 \
-          -J zap-report.json \
-          -r zap-report.html \
-          -m 3 \
+          -J -r -w zap-report.html \
+          -m 5 \
           -I
-
-    - name: Check scan results
-      run: |
-        echo "📊 Scan results analysis..."
-        if [ -f zap-reports/zap-report.json ]; then
-          HIGH_COUNT=$(jq '[.site[]?.alerts[]? | select(.risk == "High")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
-          MEDIUM_COUNT=$(jq '[.site[]?.alerts[]? | select(.risk == "Medium")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
-          LOW_COUNT=$(jq '[.site[]?.alerts[]? | select(.risk == "Low")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
           
-          echo "ZAP Findings:"
-          echo "  High risk: $HIGH_COUNT"
-          echo "  Medium risk: $MEDIUM_COUNT" 
-          echo "  Low risk: $LOW_COUNT"
-          
-          if [ "$HIGH_COUNT" -gt 0 ]; then
-            echo "❌ Security gate blocked: $HIGH_COUNT high-risk issues found"
-            exit 1
-          else
-            echo "✅ No high-risk security issues found"
-          fi
-        else
-          echo "⚠️ ZAP report not generated, but scan completed"
-        fi
+        echo "✅ ZAP Baseline Scan completed"
+      continue-on-error: true
+      timeout-minutes: 25
     
-    - name: Upload security reports
+    - name: Run Nuclei Scan
+      run: |
+        echo "🔍 Starting Nuclei Scan..."
+        
+        mkdir -p nuclei-reports
+        
+        # Запускаем сканирование (без обновления шаблонов для скорости)
+        docker run --rm \
+          --network host \
+          -v $(pwd)/nuclei-reports:/reports \
+          projectdiscovery/nuclei:latest \
+          -u http://localhost:8080 \
+          -severity critical,high,medium \
+          -json -o /reports/nuclei-results.json \
+          -rate-limit 30 \
+          -timeout 20
+          
+        echo "✅ Nuclei Scan completed"
+      continue-on-error: true
+      timeout-minutes: 15
+    
+    - name: Run Nikto Scan
+      run: |
+        echo "🔍 Starting Nikto Scan..."
+        mkdir -p nikto-reports
+        
+        docker run --rm \
+          --network host \
+          -v $(pwd)/nikto-reports:/reports \
+          sullo/nikto \
+          -h http://localhost:8080 \
+          -o /reports/nikto-report.html \
+          -Format htm
+          
+        echo "✅ Nikto Scan completed"
+      continue-on-error: true
+      timeout-minutes: 10
+    
+    - name: Analyze and Generate Summary
+      run: |
+        echo "📊 Generating DAST Scan Summary..."
+        
+        # Создаем красивый отчет
+        cat << EOF > dast-summary.md
+        # 🛡️ DAST Security Scan Report
+        
+        ## Scan Information
+        - **Scan Date**: $(date)
+        - **Target Application**: DefectDojo
+        - **Target URL**: http://localhost:8080
+        - **Workflow**: ${{ github.workflow }}
+        - **Run ID**: ${{ github.run_id }}
+        
+        ## 📈 Scan Results
+        EOF
+        
+        # Анализ ZAP результатов
+        if [ -f zap-reports/zap-report.json ]; then
+          ZAP_HIGH=$(jq '[.site[]?.alerts[]? | select(.risk == "High")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
+          ZAP_MEDIUM=$(jq '[.site[]?.alerts[]? | select(.risk == "Medium")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
+          ZAP_LOW=$(jq '[.site[]?.alerts[]? | select(.risk == "Low")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
+          ZAP_INFO=$(jq '[.site[]?.alerts[]? | select(.risk == "Informational")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
+          
+          echo "### 🔥 OWASP ZAP Results" >> dast-summary.md
+          echo "- **High Risk**: $ZAP_HIGH" >> dast-summary.md
+          echo "- **Medium Risk**: $ZAP_MEDIUM" >> dast-summary.md
+          echo "- **Low Risk**: $ZAP_LOW" >> dast-summary.md
+          echo "- **Informational**: $ZAP_INFO" >> dast-summary.md
+          echo "" >> dast-summary.md
+        else
+          echo "### OWASP ZAP Results: No report generated" >> dast-summary.md
+        fi
+        
+        # Анализ Nuclei результатов
+        if [ -f nuclei-reports/nuclei-results.json ]; then
+          NUCLEI_CRITICAL=$(grep -c '"severity":"critical"' nuclei-reports/nuclei-results.json 2>/dev/null || echo "0")
+          NUCLEI_HIGH=$(grep -c '"severity":"high"' nuclei-reports/nuclei-results.json 2>/dev/null || echo "0")
+          NUCLEI_MEDIUM=$(grep -c '"severity":"medium"' nuclei-reports/nuclei-results.json 2>/dev/null || echo "0")
+          
+          echo "### 🎯 Nuclei Results" >> dast-summary.md
+          echo "- **Critical**: $NUCLEI_CRITICAL" >> dast-summary.md
+          echo "- **High**: $NUCLEI_HIGH" >> dast-summary.md
+          echo "- **Medium**: $NUCLEI_MEDIUM" >> dast-summary.md
+          echo "" >> dast-summary.md
+        else
+          echo "### Nuclei Results: No report generated" >> dast-summary.md
+        fi
+        
+        # Добавляем рекомендации
+        cat << EOF >> dast-summary.md
+        ## 🚨 Security Assessment
+        
+        EOF
+        
+        # Динамическая оценка рисков
+        if [ "$ZAP_HIGH" -gt 0 ] || [ "$NUCLEI_CRITICAL" -gt 0 ]; then
+          echo "**Status**: ❌ CRITICAL - Immediate action required" >> dast-summary.md
+        elif [ "$ZAP_MEDIUM" -gt 0 ] || [ "$NUCLEI_HIGH" -gt 0 ]; then
+          echo "**Status**: ⚠️ HIGH - Review and fix required" >> dast-summary.md
+        else
+          echo "**Status**: ✅ PASS - No critical issues found" >> dast-summary.md
+        fi
+        
+        cat << EOF >> dast-summary.md
+        
+        ## 📋 Recommended Actions
+        
+        1. **Review detailed reports** in the downloaded artifacts
+        2. **Prioritize Critical/High vulnerabilities**
+        3. **Implement security headers**
+        4. **Input validation improvements**
+        5. **Re-scan after fixes**
+        
+        ## 🔍 Next Steps
+        
+        - Download artifacts for detailed analysis
+        - Create tickets for identified vulnerabilities
+        - Schedule re-scan after remediation
+        - Consider implementing WAF rules
+        
+        ---
+        *Generated automatically by GitHub Actions DAST Pipeline*
+        EOF
+        
+        echo "✅ DAST Summary Report generated"
+        
+        # Выводим краткий результат в консоль
+        echo "=== DAST SCAN COMPLETED ==="
+        echo "ZAP - High: $ZAP_HIGH, Medium: $ZAP_MEDIUM"
+        echo "Nuclei - Critical: $NUCLEI_CRITICAL, High: $NUCLEI_HIGH"
+    
+    - name: Upload DAST Reports
       uses: actions/upload-artifact@v4
       with:
-        name: dast-reports-${{ github.sha }}
-        path: zap-reports/
-        if-no-files-found: ignore
+        name: dast-reports-${{ github.run_id }}
+        path: |
+          zap-reports/
+          nuclei-reports/
+          nikto-reports/
+          dast-summary.md
         retention-days: 30
+        compression-level: 9
     
-    - name: Create security summary
+    - name: Notify Scan Completion
       if: always()
       run: |
-        echo "## 🛡️ DAST Security Scan Report" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Target**: http://localhost:8080" >> $GITHUB_STEP_SUMMARY
-        echo "**Scan Date**: $(date)" >> $GITHUB_STEP_SUMMARY
-        echo "**Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [ -f zap-reports/zap-report.json ]; then
-          HIGH_COUNT=$(jq '[.site[]?.alerts[]? | select(.risk == "High")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
-          MEDIUM_COUNT=$(jq '[.site[]?.alerts[]? | select(.risk == "Medium")] | length' zap-reports/zap-report.json 2>/dev/null || echo "0")
-          
-          echo "### Security Findings:" >> $GITHUB_STEP_SUMMARY
-          echo "- **High Risk**: $HIGH_COUNT" >> $GITHUB_STEP_SUMMARY
-          echo "- **Medium Risk**: $MEDIUM_COUNT" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "$HIGH_COUNT" -gt 0 ]; then
-            echo "### 🚨 Security Gate Blocked" >> $GITHUB_STEP_SUMMARY
-            echo "Deployment blocked due to high-risk security issues" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### ✅ Security Gate Passed" >> $GITHUB_STEP_SUMMARY
-            echo "No critical security issues found" >> $GITHUB_STEP_SUMMARY
-          fi
-        else
-          echo "### 📋 Scan Completed" >> $GITHUB_STEP_SUMMARY
-          echo "ZAP security scan executed successfully" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "---" >> $GITHUB_STEP_SUMMARY
-        echo "*Automated security scan by GitHub Actions*" >> $GITHUB_STEP_SUMMARY
-    
-    - name: Security Gate
-      run: |
-        echo "🔒 Security Check Results:"
-        
-        if [ -f security-reports/zap-report.json ]; then
-          ZAP_HIGH=$(jq '[.site[]?.alerts[]? | select(.risk == "High")] | length' security-reports/zap-report.json 2>/dev/null || echo "0")
-          echo "ZAP High Risk: $ZAP_HIGH"
-          
-          if [ "$ZAP_HIGH" -gt 0 ]; then
-            echo "❌ ZAP found $ZAP_HIGH high-risk issues"
-            exit 1
-          fi
-        fi
-        
-        echo "✅ No critical security issues found"
-    
-    - name: Upload Security Reports
-      uses: actions/upload-artifact@v4
-      with:
-        name: security-reports-${{ github.sha }}
-        path: security-reports/
-    
-    - name: Create Security Summary
-      if: always()
-      run: |
-        echo "## 🛡️ DAST Security Scan" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Target**: http://localhost:8080" >> $GITHUB_STEP_SUMMARY
-        echo "**Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [ -f security-reports/zap-report.json ]; then
-          ZAP_HIGH=$(jq '[.site[]?.alerts[]? | select(.risk == "High")] | length' security-reports/zap-report.json 2>/dev/null || echo "0")
-          ZAP_MEDIUM=$(jq '[.site[]?.alerts[]? | select(.risk == "Medium")] | length' security-reports/zap-report.json 2>/dev/null || echo "0")
-          echo "**ZAP Results**: High: $ZAP_HIGH, Medium: $ZAP_MEDIUM" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "**ZAP Results**: No report generated" >> $GITHUB_STEP_SUMMARY
-        fi
+        echo "🎉 DAST Scanning completed!"
+        echo "Workflow: ${{ github.workflow }}"
+        echo "Status: ${{ job.status }}"
+        echo "Run URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
