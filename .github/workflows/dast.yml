@@ -32,7 +32,7 @@ jobs:
           echo "Detailed report available in attached files" >> SUMMARY.md
   
     - name: Upload reports to GitHub
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: zap-reports
         path: reports/
