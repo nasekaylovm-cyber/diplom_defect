@@ -1,7 +1,10 @@
 name: Stage_4_DAST_Scanning
 
 on:
-  workflow_dispatch: 
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
 
 jobs:
   dast-scan:
