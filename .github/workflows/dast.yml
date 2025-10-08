@@ -1,4 +1,4 @@
-name: DAST
+name: 4 DAST
 
 on:
   push:
