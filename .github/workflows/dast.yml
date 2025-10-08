@@ -18,7 +18,15 @@ jobs:
           -v $(pwd)/reports:/zap/wrk:rw \
           ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
           -t http://localhost:8080 \
+          -J zap-report.json \
+          -r zap-report.html \
           -I
+
+    - name: Check if reports were created
+      run: |
+        echo "📁 Checking reports directory:"
+        ls -la security-reports/ || echo "No reports directory"
+        find . -name "*.json" -o -name "*.html" | head -10
     
     - name: Security Gate
       run: |
@@ -55,4 +63,6 @@ jobs:
           ZAP_HIGH=$(jq '[.site[]?.alerts[]? | select(.risk == "High")] | length' security-reports/zap-report.json 2>/dev/null || echo "0")
           ZAP_MEDIUM=$(jq '[.site[]?.alerts[]? | select(.risk == "Medium")] | length' security-reports/zap-report.json 2>/dev/null || echo "0")
           echo "**ZAP Results**: High: $ZAP_HIGH, Medium: $ZAP_MEDIUM" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "**ZAP Results**: No report generated" >> $GITHUB_STEP_SUMMARY
         fi
