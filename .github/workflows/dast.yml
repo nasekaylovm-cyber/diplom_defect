@@ -23,7 +23,7 @@ jobs:
           -m 3 \
           -I
 
-   - name: Check scan results
+    - name: Check scan results
       run: |
         echo "📊 Scan results analysis..."
         if [ -f zap-reports/zap-report.json ]; then
