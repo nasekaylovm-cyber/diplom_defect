@@ -1,4 +1,4 @@
-name: 4 DAST
+name: DAST Nas
 
 on:
   push:
