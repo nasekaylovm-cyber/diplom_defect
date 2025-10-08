@@ -27,7 +27,7 @@ jobs:
           projectdiscovery/nuclei:latest \
           -u http://localhost:8080 \
           -severity critical,high \
-          -json -o /reports/nuclei-report.json
+          -json -o /reports/nuclei-report.txt
       continue-on-error: true
     
     - name: Security Gate
