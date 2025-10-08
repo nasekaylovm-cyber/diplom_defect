@@ -22,6 +22,38 @@ jobs:
           -J zap-report.json \
           -r zap-report.html \
           -I
-
+          
+    - name: Generate summary
+      run: |
+          echo "### ZAP Scan Results" > SUMMARY.md
+          echo "" >> SUMMARY.md
+          echo "![Report](reports/zap-report.html)" >> SUMMARY.md
+          echo "" >> SUMMARY.md
+          echo "Detailed report available in attached files" >> SUMMARY.md
+  
+    - name: Upload reports to GitHub
+      uses: actions/upload-artifact@v3
+      with:
+        name: zap-reports
+        path: reports/
+  
+    - name: Create Pull Request Comment
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: github.event_name == 'pull_request'
+      with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          title: ZAP Scan Results
+          label: security
+          body-path: SUMMARY.md
+  
+    - name: Create Issue if High Severity Found
+      run: |
+          
+          if grep -q '"risk': 'High"' reports/zap-report.json; then
+            curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -X POST -H "Content-Type: application/json" \
+            https://api.github.com/repos/${{ github.repository }}/issues \
+            -d '{"title":"High Severity Vulnerability Found","body":"Critical vulnerability detected during ZAP scan. Please check the report for details."}'
+          fi
     
  
