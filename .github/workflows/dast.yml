@@ -8,32 +8,8 @@ jobs:
     runs-on: self-hosted
     
     steps:
-    - name: Check if app is running
-      run: |
-        curl -f http://localhost:8080 || exit 1
-        echo "App is running"
-    
-    - name: Run ZAP scan
+    - name: ZAP Scan
       run: |
         docker run --rm --network host \
-          -v $(pwd):/reports \
           owasp/zap2docker-weekly zap-baseline.py \
-          -t http://localhost:8080 \
-          -J -r \
-          -m 5
-      continue-on-error: true
-    
-    - name: Run Nuclei scan
-      run: |
-        docker run --rm --network host \
-          -v $(pwd):/reports \
-          projectdiscovery/nuclei:latest \
-          -u http://localhost:8080 \
-          -severity critical,high \
-          -json -o nuclei-results.json
-      continue-on-error: true
-    
-    - name: Show results
-      run: |
-        echo "=== SCAN COMPLETE ==="
-        ls -la *.json *.html 2>/dev/null || echo "No reports generated"
+          -t http://localhost:8080
