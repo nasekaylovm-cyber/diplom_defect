@@ -1,7 +1,10 @@
 name: DAST
 
-on: 
-  workflow_dispatch:
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
 
 jobs:
   dast:
