@@ -1,0 +1,40 @@
+name: DAST
+
+
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+
+jobs:
+  dast-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Wait for application to be ready
+      run: |
+        echo "Waiting for application to start..."
+        timeout 180s bash -c 'while ! curl -s http://localhost:8080 > /dev/null; do sleep 5; done' || true
+        curl -f http://localhost:8080 && echo "Application is ready!"
+    
+    - name: OWASP ZAP Full Scan
+      run: |
+        docker run --rm \
+          -v $(pwd)/zap-reports:/zap/reports:rw \
+          -u zap \
+          owasp/zap2docker-stable zap-full-scan.py \
+          -t http://host.docker.internal:8080 \
+          -g gen.conf \
+          -r zap-report.html \
+          -x zap-report.xml \
+          -J zap-report.json
+        
+        echo "ZAP Scan completed"
+      continue-on-error: true
+  
