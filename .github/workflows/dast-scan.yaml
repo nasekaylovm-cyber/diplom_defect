@@ -1,4 +1,4 @@
-name: 4_Stage_DAST_Scanning
+name: Stage_4_DAST_Scanning
 
 on:
   workflow_dispatch: 
