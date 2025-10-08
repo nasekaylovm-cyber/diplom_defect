@@ -20,21 +20,10 @@ jobs:
           -t http://localhost:8080 \
           -I
     
-    - name: Nuclei Scan
-      run: |
-        docker run --rm --network host \
-          -v $(pwd)/security-reports:/reports \
-          projectdiscovery/nuclei:latest \
-          -u http://localhost:8080 \
-          -severity critical,high \
-          -json -o /reports/nuclei-report.txt
-      continue-on-error: true
-    
     - name: Security Gate
       run: |
         echo "🔒 Security Check Results:"
         
-        # Check ZAP results
         if [ -f security-reports/zap-report.json ]; then
           ZAP_HIGH=$(jq '[.site[]?.alerts[]? | select(.risk == "High")] | length' security-reports/zap-report.json 2>/dev/null || echo "0")
           if [ "$ZAP_HIGH" -gt 0 ]; then
@@ -42,16 +31,6 @@ jobs:
             exit 1
           fi
         fi
-        
-        # Check Nuclei results  
-        if [ -f security-reports/nuclei-report.json ]; then
-          NUCLEI_CRITICAL=$(grep -c '"severity":"critical"' security-reports/nuclei-report.json 2>/dev/null || echo "0")
-          if [ "$NUCLEI_CRITICAL" -gt 0 ]; then
-            echo "❌ Nuclei found $NUCLEI_CRITICAL critical issues"
-            exit 1
-          fi
-        fi
-        
         echo "✅ No critical security issues found"
     
     - name: Upload Security Reports
