@@ -26,11 +26,14 @@ jobs:
         
         if [ -f security-reports/zap-report.json ]; then
           ZAP_HIGH=$(jq '[.site[]?.alerts[]? | select(.risk == "High")] | length' security-reports/zap-report.json 2>/dev/null || echo "0")
+          echo "ZAP High Risk: $ZAP_HIGH"
+          
           if [ "$ZAP_HIGH" -gt 0 ]; then
             echo "❌ ZAP found $ZAP_HIGH high-risk issues"
             exit 1
           fi
         fi
+        
         echo "✅ No critical security issues found"
     
     - name: Upload Security Reports
@@ -40,23 +43,16 @@ jobs:
         path: security-reports/
     
     - name: Create Security Summary
-      uses: actions/github-script@v6
       if: always()
-      with:
-        script: |
-          const summary = `
-          ## 🛡️ DAST Security Scan Complete
-          
-          **Scan Target**: http://localhost:8080
-          **Status**: ${{ job.status }}
-          **Reports**: Available in artifacts
-          
-          [View Reports](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          `;
-          
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: summary
-          });
+      run: |
+        echo "## 🛡️ DAST Security Scan" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Target**: http://localhost:8080" >> $GITHUB_STEP_SUMMARY
+        echo "**Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f security-reports/zap-report.json ]; then
+          ZAP_HIGH=$(jq '[.site[]?.alerts[]? | select(.risk == "High")] | length' security-reports/zap-report.json 2>/dev/null || echo "0")
+          ZAP_MEDIUM=$(jq '[.site[]?.alerts[]? | select(.risk == "Medium")] | length' security-reports/zap-report.json 2>/dev/null || echo "0")
+          echo "**ZAP Results**: High: $ZAP_HIGH, Medium: $ZAP_MEDIUM" >> $GITHUB_STEP_SUMMARY
+        fi
